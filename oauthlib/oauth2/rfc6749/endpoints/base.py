@@ -8,6 +8,7 @@ for consuming and providing OAuth 2.0 RFC6749.
 """
 import functools
 import logging
+import os
 
 from ..errors import (FatalClientError, OAuth2Error, ServerError,
                       TemporarilyUnavailableError, InvalidRequestError,
@@ -16,6 +17,9 @@ from ..errors import (FatalClientError, OAuth2Error, ServerError,
 from oauthlib.common import CaseInsensitiveDict, urldecode
 
 log = logging.getLogger(__name__)
+
+
+OAUTHLIB_ALLOWED_POST_QUERY_PARAMS = os.environ.get('OAUTHLIB_ALLOWED_POST_QUERY_PARAMS', [])
 
 
 class BaseEndpoint:
@@ -34,7 +38,7 @@ class BaseEndpoint:
         if valid_request_methods is not None:
             valid_request_methods = [x.upper() for x in valid_request_methods]
         self._valid_request_methods = valid_request_methods
-    
+
 
     @property
     def available(self):
@@ -42,7 +46,7 @@ class BaseEndpoint:
 
     @available.setter
     def available(self, available):
-        self._available = available       
+        self._available = available
 
     @property
     def catch_errors(self):
@@ -85,10 +89,14 @@ class BaseEndpoint:
         """Raise if invalid POST request received
         """
         if request.http_method.upper() == 'POST':
-            query_params = request.uri_query or ""
-            if query_params:
-                raise InvalidRequestError(request=request,
-                                          description=('URL query parameters are not allowed'))
+            query_params = CaseInsensitiveDict(dict(urldecode(request.uri_query)))
+            for key in query_params:
+                if key not in OAUTHLIB_ALLOWED_POST_QUERY_PARAMS:
+                    raise InvalidRequestError(
+                        request=request,
+                        description=('URL query parameters are not allowed for key {key}'.format(key=key))
+                    )
+
 
 def catch_errors_and_unavailability(f):
     @functools.wraps(f)
